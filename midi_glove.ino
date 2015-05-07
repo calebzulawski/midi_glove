@@ -5,6 +5,7 @@
 MPU6050 mpu;
 
 #define LED_PIN 13
+
 int led_count = 0;
 bool led_on = true;
 
@@ -24,7 +25,9 @@ VectorInt16 accelWorld;
 VectorFloat gravity;
 float ypr[3];
 int pitchbend;
+int pitchbend_prev;
 int cutoff;
+int cutoff_prev;
 
 volatile bool mpuInterrupt = false;
 void dmpDataReady(){
@@ -32,8 +35,8 @@ void dmpDataReady(){
 }
 
 void setup() {
-  pinMode(2, INPUT);
-  attachInterrupt(2, dmpDataReady, RISING);
+  pinMode(9, INPUT);
+  attachInterrupt(9, dmpDataReady, RISING);
   Wire.begin();
   TWBR = 24;
   Serial.begin(115200);
@@ -79,10 +82,13 @@ void loop() {
     mpu.dmpGetQuaternion(&q, fifoBuffer);
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    mpu.dmpGetAccel(&accel, fifoBuffer);
-    mpu.dmpGetLinearAccel(&accelNoGrav, &accel, &gravity);
+    //mpu.dmpGetAccel(&accel, fifoBuffer);
+    //mpu.dmpGetLinearAccel(&accelNoGrav, &accel, &gravity);
     
-    pitchbend = 0x2000 + 0x2000 * 2 * (ypr[2]/HALF_PI);
+    pitchbend_prev = pitchbend;
+    cutoff_prev = cutoff;
+    
+    pitchbend = 0x2000 - 0x2000 * 2 * (ypr[2]/HALF_PI);
     if(pitchbend > 0x3FFF) {
       pitchbend = 0x3FFF;
     }
@@ -90,7 +96,7 @@ void loop() {
       pitchbend = 0;
     }
     
-    cutoff = 64 - 64 * (ypr[1]/HALF_PI);
+    cutoff = 96 + 64 * 2 * (ypr[1]/HALF_PI);
     if(cutoff > 127) {
       cutoff = 127;
     }
@@ -98,11 +104,14 @@ void loop() {
       cutoff = 0;
     }
     
-    usbMIDI.sendPitchBend(pitchbend,1);
-    usbMIDI.sendControlChange(74,cutoff,1);
-    Serial.println(cutoff);
-    
-    led_count++;
+    if(pitchbend != pitchbend_prev) {
+      usbMIDI.sendPitchBend(pitchbend,1);
+      led_count++;
+    }
+    if(cutoff != cutoff_prev) {
+      usbMIDI.sendControlChange(74,cutoff,1);
+      led_count++;
+    }
     
     if (led_count >= 3){
       led_on = !led_on;
